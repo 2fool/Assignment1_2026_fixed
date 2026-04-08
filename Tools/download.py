@@ -172,7 +172,7 @@ def download_mini(
     print("Mini dataset download complete.")
 
 
-def download_spacy_model(model: str = "en") -> None:
+def download_spacy_model(model: str = "en_core_web_sm") -> None:
     """Download the spaCy language model required for tokenisation.
 
     Parameters

@@ -27,14 +27,17 @@ class PosEncoder(nn.Module):
     def __init__(self, d_model: int, length: int):
         super().__init__()
         freqs = torch.tensor(
-            [10000 ** (-i / d_model) if i % 2 == 0 else -10000 ** ((1 - i) / d_model) for i in range(d_model)],
-            dtype=torch.float32
-        ).unsqueeze(0)  # [C, 1]
+            [
+                10000 ** (-(i // 2) * 2.0 / d_model)
+                for i in range(d_model)
+            ],
+            dtype=torch.float32,
+        ).unsqueeze(1)  # [C, 1]
         phases = torch.tensor(
             [0.0 if i % 2 == 0 else math.pi / 2 for i in range(d_model)],
-            dtype=torch.float32
+            dtype=torch.float32,
         ).unsqueeze(1)
-        pos = torch.arange(length, dtype=torch.float32).repeat(d_model, 1)
+        pos = torch.arange(length, dtype=torch.float32).unsqueeze(0)  # [1, L]
         pe = torch.sin(pos * freqs + phases)  # [C, L]
         self.register_buffer("pos_encoding", pe)
 
@@ -60,29 +63,24 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         # x: [B, C, L], mask: [B, L] True=PAD
-        batch_size, channels, length = x.size()
+        batch_size, _, length = x.size()
         x = x.transpose(1, 2)  # [B, L, C]
 
-        q = self.q_linear(x).view(batch_size, length, self.num_heads, self.d_k)
-        k = self.k_linear(x).view(batch_size, length, self.num_heads, self.d_k)
-        v = self.v_linear(x).view(batch_size, length, self.num_heads, self.d_k)
-
-        q = q.permute(2, 0, 1, 3).contiguous().view(batch_size * self.num_heads, length, self.d_k)
-        k = k.permute(2, 0, 1, 3).contiguous().view(batch_size * self.num_heads, length, self.d_k)
-        v = v.permute(2, 0, 1, 3).contiguous().view(batch_size * self.num_heads, length, self.d_k)
+        q = self.q_linear(x).view(batch_size, length, self.num_heads, self.d_k).permute(0, 2, 1, 3)
+        k = self.k_linear(x).view(batch_size, length, self.num_heads, self.d_k).permute(0, 2, 1, 3)
+        v = self.v_linear(x).view(batch_size, length, self.num_heads, self.d_k).permute(0, 2, 1, 3)
 
         if mask.dtype != torch.bool:
             mask = mask.bool()
-        attn_mask = mask.unsqueeze(1).expand(-1, length, -1).repeat(self.num_heads, 1, 1)  # [B*h, L, L]
+        attn_mask = mask.unsqueeze(1).unsqueeze(2).expand(-1, self.num_heads, length, -1)  # [B, h, L, L]
 
-        attn = torch.bmm(q, k.transpose(1, 2))
+        attn = torch.matmul(q, k.transpose(-1, -2)) * self.scale
         attn = mask_logits(attn, attn_mask)
-        attn = F.softmax(attn, dim=2)
+        attn = F.softmax(attn, dim=-1)
         attn = self.drop(attn)
 
-        out = torch.bmm(attn, v)  # [B*h, L, d_k]
-        out = out.view(batch_size, self.num_heads, length, self.d_k)
-        out = out.permute(1, 2, 0, 3).contiguous().view(batch_size, length, self.d_model)
+        out = torch.matmul(attn, v)  # [B, h, L, d_k]
+        out = out.permute(0, 2, 1, 3).contiguous().view(batch_size, length, self.d_model)
         out = self.fc(out)
         out = self.drop(out)
         return out.transpose(1, 2)  # [B, C, L]
@@ -104,24 +102,21 @@ class EncoderBlock(nn.Module):
         self.normb = get_norm(norm_name, d_model, length, num_groups=norm_groups)
         self.norms = nn.ModuleList([get_norm(norm_name, d_model, length, num_groups=norm_groups) for _ in range(conv_num)])
         self.norme = get_norm(norm_name, d_model, length, num_groups=norm_groups)
-        self.L = conv_num
-
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         out = self.pos(x)
-        res = out
         out = self.normb(out)
 
         for i, conv in enumerate(self.convs):
+            res = out
             out = conv(out)
             out = self.act(out)
             out = out + res
-            if (i + 1) % 2 == 0:
-                out = self.conv_drops[i](out)
-            res = out
-            out = self.norms[i + 1](out)
+            out = self.conv_drops[i](out)
+            out = self.norms[i](out)
 
+        res = out
         out = self.self_att(out, mask)
-        out = res
+        out = out + res
         out = self.drop(out)
 
         res = out

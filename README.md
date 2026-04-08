@@ -21,8 +21,8 @@ drive.mount('/content/drive')
 
 ```python
 import os
-REPO_URL     = "https://github.com/usyddeeplearning/Assignment1--2026.git"
-PROJECT_ROOT = "/content/drive/MyDrive/Assignment1--2026"
+REPO_URL     = "https://github.com/usyddeeplearning/Assignment1_2026.git"
+PROJECT_ROOT = "/content/drive/MyDrive/Assignment1_2026"
 
 if not os.path.exists(PROJECT_ROOT):
     !git clone {REPO_URL} {PROJECT_ROOT}
@@ -35,7 +35,7 @@ Close this temporary notebook when done.
 
 ### 2 — Open the assignment notebook
 
-In Google Drive, navigate to `MyDrive/Assignment1--2026/` and double-click **`assignment1.ipynb`** to open it in Colab. Run cells in order from Section 0 downward — the notebook handles dependency installation, data download, preprocessing, training, and evaluation.
+In Google Drive, navigate to `MyDrive/Assignment1_2026/` and double-click **`assignment1.ipynb`** to open it in Colab. Run cells in order from Section 0 downward — the notebook handles dependency installation, data download, preprocessing, training, and evaluation.
 
 > Your files live on Google Drive, so they persist across Colab sessions. You only need to clone once.
 
@@ -44,7 +44,7 @@ In Google Drive, navigate to `MyDrive/Assignment1--2026/` and double-click **`as
 If the repo is updated after you've cloned it, open a Colab cell and run:
 
 ```python
-!cd /content/drive/MyDrive/Assignment1--2026 && git pull
+!cd /content/drive/MyDrive/Assignment1_2026 && git pull
 ```
 
 Be careful — if you've edited files that were also updated upstream, you may get merge conflicts. Commit or back up your changes first.
