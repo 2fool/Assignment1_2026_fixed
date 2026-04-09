@@ -67,6 +67,8 @@ See the `docs/` folder for the submission support materials:
 - `docs/02_Bug清单与报告素材.md`
 - `docs/03_实验设计与记录模板.md`
 - `docs/04_最终提交Checklist.md`
+- `docs/05_报告目录与每节写什么.md`
+- `docs/06_三组实验可直接运行命令.md`
 
 ## Notes
 
