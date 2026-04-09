@@ -1,18 +1,41 @@
-# Assignment 1 — QANet
+# Assignment 1 — QANet (Fixed Submission Repo)
 
 **COMP5329 Deep Learning — University of Sydney, Semester 1 2026**
 
-This repository contains a PyTorch implementation of [QANet](https://arxiv.org/pdf/1804.09541.pdf) for extractive question answering on SQuAD v1.1. The distributed code contains **intentional bugs** — your task is to find and fix them all. See the assignment spec for details.
+This repository is a repaired, submission-oriented version of the provided Assignment 1 QANet codebase.
 
-The entire pipeline (download, preprocess, train, evaluate) is driven from a single notebook: **`assignment1.ipynb`**.
+It is intended to help a group:
+- run the pipeline locally,
+- validate executability on Google Colab,
+- record bugs and experiments for the report,
+- and prepare the final Google Drive submission required by the assignment PDF.
 
----
+## Primary entrypoint
 
-## Getting Started on Google Colab
+The grading-facing notebook is:
+- `assignment1.ipynb`
 
-### 1 — Clone the repo into Google Drive
+Tutors are expected to run the notebook directly, so notebook executability is a hard requirement.
 
-Open a **new notebook** at [colab.research.google.com](https://colab.research.google.com) and run:
+## Recommended workflow
+
+### 1. Local-first development
+Use your local machine for:
+- code inspection and debugging,
+- experiment iteration,
+- report writing,
+- and keeping a clean git history.
+
+### 2. Colab validation
+Use Colab for:
+- clean-environment validation,
+- notebook executability checks,
+- and optional longer training if local compute is limited.
+
+### 3. Final submission
+Upload the **entire corrected repository** to Google Drive and place the public sharing link on the **first page of the report**.
+
+## Quick start on Colab
 
 ```python
 from google.colab import drive
@@ -21,30 +44,32 @@ drive.mount('/content/drive')
 
 ```python
 import os
-REPO_URL     = "https://github.com/usyddeeplearning/Assignment1_2026.git"
-PROJECT_ROOT = "/content/drive/MyDrive/Assignment1_2026"
+REPO_URL = "https://github.com/2fool/Assignment1_2026_fixed.git"
+PROJECT_ROOT = "/content/drive/MyDrive/Assignment1_2026_fixed"
 
 if not os.path.exists(PROJECT_ROOT):
     !git clone {REPO_URL} {PROJECT_ROOT}
-    print("Done.")
 else:
-    print("Already cloned — skipping.")
+    print("Already cloned")
 ```
-
-Close this temporary notebook when done.
-
-### 2 — Open the assignment notebook
-
-In Google Drive, navigate to `MyDrive/Assignment1_2026/` and double-click **`assignment1.ipynb`** to open it in Colab. Run cells in order from Section 0 downward — the notebook handles dependency installation, data download, preprocessing, training, and evaluation.
-
-> Your files live on Google Drive, so they persist across Colab sessions. You only need to clone once.
-
-### 3 — Pulling updates
-
-If the repo is updated after you've cloned it, open a Colab cell and run:
 
 ```python
-!cd /content/drive/MyDrive/Assignment1_2026 && git pull
+!pip install -r /content/drive/MyDrive/Assignment1_2026_fixed/requirements.txt -q
+!python -m spacy download en_core_web_sm
 ```
 
-Be careful — if you've edited files that were also updated upstream, you may get merge conflicts. Commit or back up your changes first.
+Then open and run `assignment1.ipynb`.
+
+## Documentation bundle
+
+See the `docs/` folder for the submission support materials:
+- `docs/01_总说明与运行部署指南.md`
+- `docs/02_Bug清单与报告素材.md`
+- `docs/03_实验设计与记录模板.md`
+- `docs/04_最终提交Checklist.md`
+
+## Notes
+
+- Use this repo as the **only final baseline**. Do not mix it with older broken copies.
+- For stable checkpoint saving, prefer the notebook/default training configuration in this repo.
+- If Colab imported an older copy before, restart the runtime and ensure `cwd` and `sys.path[0]` point to this repo.
