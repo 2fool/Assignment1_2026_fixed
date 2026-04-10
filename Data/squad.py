@@ -31,26 +31,29 @@ def sanity_check_cache(args):
 class SQuADDataset(Dataset):
     def __init__(self, npz_file: str):
         super().__init__()
-        data = np.load(npz_file)
+        # Memory-map arrays instead of materialising the full split as int64
+        # tensors up front. This reduces host RAM usage substantially on Colab
+        # for full-data SQuAD training.
+        data = np.load(npz_file, mmap_mode="r")
 
-        self.context_idxs      = torch.from_numpy(data["context_idxs"]).long()
-        self.context_char_idxs = torch.from_numpy(data["context_char_idxs"]).long()
-        self.ques_idxs         = torch.from_numpy(data["ques_idxs"]).long()
-        self.ques_char_idxs    = torch.from_numpy(data["ques_char_idxs"]).long()
-        self.y1s               = torch.from_numpy(data["y1s"]).long()
-        self.y2s               = torch.from_numpy(data["y2s"]).long()
-        self.ids               = torch.from_numpy(data["ids"]).long()
+        self.context_idxs      = data["context_idxs"]
+        self.context_char_idxs = data["context_char_idxs"]
+        self.ques_idxs         = data["ques_idxs"]
+        self.ques_char_idxs    = data["ques_char_idxs"]
+        self.y1s               = data["y1s"]
+        self.y2s               = data["y2s"]
+        self.ids               = data["ids"]
 
     def __len__(self):
         return len(self.ids)
 
     def __getitem__(self, idx: int):
         return (
-            self.context_idxs[idx],
-            self.context_char_idxs[idx],
-            self.ques_idxs[idx],
-            self.ques_char_idxs[idx],
-            self.y1s[idx],
-            self.y2s[idx],
-            self.ids[idx],
+            torch.from_numpy(np.asarray(self.context_idxs[idx])).long(),
+            torch.from_numpy(np.asarray(self.context_char_idxs[idx])).long(),
+            torch.from_numpy(np.asarray(self.ques_idxs[idx])).long(),
+            torch.from_numpy(np.asarray(self.ques_char_idxs[idx])).long(),
+            torch.tensor(int(self.y1s[idx]), dtype=torch.long),
+            torch.tensor(int(self.y2s[idx]), dtype=torch.long),
+            torch.tensor(int(self.ids[idx]), dtype=torch.long),
         )

@@ -111,7 +111,7 @@ def evaluate(
         raise ValueError(f"Unknown loss '{loss_name}'. Available: {list(losses.keys())}")
 
     ckpt_path = os.path.join(save_dir, ckpt_name)
-    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    ckpt = torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
     ckpt_config = ckpt.get("config", {}) or {}
 
     # Build a lightweight namespace so existing helpers can consume it

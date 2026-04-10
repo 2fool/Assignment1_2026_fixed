@@ -84,6 +84,14 @@ If the goal is to improve EM substantially, use:
 Main notebook:
 - `assignment1.ipynb`
 
+### Before training: choose GPU runtime
+
+On Colab, use:
+- **Runtime -> Change runtime type -> GPU**
+
+Do **not** train the full-data configuration on a CPU runtime unless you only
+want a slow smoke test.
+
 ### Step 1. Mount Google Drive
 
 ```python
@@ -118,6 +126,14 @@ The notebook is already configured for:
 - full-data preprocessing;
 - long training;
 - best-checkpoint evaluation.
+
+For standard Colab memory, start conservatively:
+- `batch_size=4`
+
+If runtime memory is still tight:
+- reduce `batch_size` to `2`
+
+Only increase batch size above `4` if the runtime clearly has enough memory.
 
 ---
 
@@ -206,14 +222,14 @@ Current recommended starting recipe:
 - full GloVe 840B 300d
 - `optimizer_name="adam"`
 - `scheduler_name="cosine"`
-- `batch_size=16`
+- `batch_size=4`
 - `num_steps=12000`
 - `checkpoint=1000`
 - `test_num_batches=-1`
 - `max_answer_len=30`
 
 If Colab memory is not enough:
-- reduce `batch_size` from `16` to `8`
+- reduce `batch_size` from `4` to `2`
 
 If the model is still improving late in training:
 - increase `num_steps` to `16000` or `20000`
@@ -243,6 +259,9 @@ It should **not** be used as the final training setup for EM comparison.
 ## 6. Notes
 
 - Metrics in this repo are returned on a **0–100 scale**, not 0–1.
+- Full-data SQuAD is memory-heavy on Colab.
+- This repo now uses a more memory-friendly dataset loading path, but full-data
+  training is still far heavier than the previous mini-data smoke-test setup.
 - Final EM depends mostly on:
   - training data scale,
   - training duration,
