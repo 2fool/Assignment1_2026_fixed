@@ -80,9 +80,35 @@ def convert_tokens(eval_file, qa_id, pp1, pp2):
     return answer_dict, remapped_dict
 
 
+def get_best_span(p1: torch.Tensor, p2: torch.Tensor, max_answer_len: int = 30):
+    """Jointly decode the best valid answer span.
+
+    The previous implementation took the independent argmax of start/end and
+    then swapped them if necessary. That can miss the best joint span badly.
+    Here we maximise p(start) + p(end) under:
+      - start <= end
+      - end - start + 1 <= max_answer_len
+    """
+    batch_size, c_len = p1.size()
+    scores = p1.unsqueeze(2) + p2.unsqueeze(1)  # [B, L, L]
+
+    valid = torch.triu(
+        torch.ones(c_len, c_len, device=scores.device, dtype=torch.bool)
+    )
+    if max_answer_len is not None and max_answer_len > 0:
+        valid &= torch.tril(valid, diagonal=max_answer_len - 1)
+
+    scores = scores.masked_fill(~valid.unsqueeze(0), -1e30)
+    best = scores.view(batch_size, -1).argmax(dim=1)
+    yp1 = best // c_len
+    yp2 = best % c_len
+    return yp1, yp2
+
+
 @torch.no_grad()
 def run_eval(model, dataset, eval_file, num_batches, batch_size,
-             use_random_batches, device, loss_fn=qa_nll_loss):
+             use_random_batches, device, loss_fn=qa_nll_loss,
+             max_answer_len: int = 30):
     loader = make_loader(dataset, batch_size, shuffle=use_random_batches)
     # num_batches=-1 means evaluate the full dataset
     batch_limit = None if num_batches < 0 else num_batches
@@ -104,13 +130,9 @@ def run_eval(model, dataset, eval_file, num_batches, batch_size,
         loss = loss_fn(p1, p2, y1, y2)
         losses.append(float(loss.item()))
 
-        yp1 = torch.argmax(p1, dim=1)
-        yp2 = torch.argmax(p2, dim=1)
-        yps = torch.stack([yp1, yp2], dim=1)
-        ymin, _ = torch.min(yps, dim=1)
-        ymax, _ = torch.max(yps, dim=1)
+        yp1, yp2 = get_best_span(p1, p2, max_answer_len=max_answer_len)
 
-        answer_dict_, _ = convert_tokens(eval_file, ids.tolist(), ymin.tolist(), ymax.tolist())
+        answer_dict_, _ = convert_tokens(eval_file, ids.tolist(), yp1.tolist(), yp2.tolist())
         answer_dict.update(answer_dict_)
 
     metrics = squad_evaluate(eval_file, answer_dict)

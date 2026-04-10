@@ -26,6 +26,25 @@ from EvaluateTools.eval_utils import run_eval
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+ARCH_KEYS = {
+    "para_limit",
+    "ques_limit",
+    "char_limit",
+    "d_model",
+    "num_heads",
+    "glove_dim",
+    "char_dim",
+    "dropout",
+    "dropout_char",
+    "pretrained_char",
+    "norm_name",
+    "norm_groups",
+    "activation",
+    "init_name",
+    "max_answer_len",
+}
+
+
 def evaluate(
     # ── Data paths ────────────────────────────────────────────────────────────
     dev_npz:        str   = "_data/dev.npz",
@@ -39,6 +58,7 @@ def evaluate(
     # ── Eval settings ─────────────────────────────────────────────────────────
     batch_size:         int   = 8,
     test_num_batches:   int   = -1,       # -1 = full dev set
+    max_answer_len:     int   = 30,
     loss_name:          str   = "qa_nll",
 
     # ── Model architecture (must match the checkpoint) ────────────────────────
@@ -90,8 +110,12 @@ def evaluate(
     if loss_name not in losses:
         raise ValueError(f"Unknown loss '{loss_name}'. Available: {list(losses.keys())}")
 
+    ckpt_path = os.path.join(save_dir, ckpt_name)
+    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    ckpt_config = ckpt.get("config", {}) or {}
+
     # Build a lightweight namespace so existing helpers can consume it
-    args = argparse.Namespace(
+    config_dict = dict(
         dev_npz=dev_npz,
         word_emb_json=word_emb_json,
         char_emb_json=char_emb_json,
@@ -107,6 +131,10 @@ def evaluate(
         dropout_char=dropout_char,
         pretrained_char=pretrained_char,
     )
+    for key in ARCH_KEYS:
+        if key in ckpt_config:
+            config_dict[key] = ckpt_config[key]
+    args = argparse.Namespace(**config_dict)
 
     word_mat, char_mat = load_word_char_mats(args)
     model = QANet(word_mat, char_mat, args).to(DEVICE)
@@ -114,8 +142,6 @@ def evaluate(
     dev_eval = load_dev_eval(args)
     dev_dataset = SQuADDataset(dev_npz)
 
-    ckpt_path = os.path.join(save_dir, ckpt_name)
-    ckpt = torch.load(ckpt_path, map_location=DEVICE)
     model.load_state_dict(ckpt["model_state"])
 
     metrics, ans = run_eval(
@@ -125,6 +151,7 @@ def evaluate(
         use_random_batches=False,
         device=DEVICE,
         loss_fn=losses[loss_name],
+        max_answer_len=getattr(args, "max_answer_len", max_answer_len),
     )
 
     with open(os.path.join(log_dir, "answers.json"), "w") as f:

@@ -44,6 +44,7 @@ def train(
     checkpoint:         int   = 200,
     val_num_batches:    int   = 150,
     test_num_batches:   int   = 150,
+    max_answer_len:     int   = 30,
     seed:               int   = 42,
     grad_clip:          float = 5.0,
     early_stop:         int   = 10,
@@ -162,6 +163,7 @@ def train(
             num_batches=val_num_batches, batch_size=batch_size,
             use_random_batches=True,
             device=DEVICE, loss_fn=loss_fn,
+            max_answer_len=max_answer_len,
         )
         print("VALID(train) loss {loss:8f}  F1 {f1:8f}  EM {exact_match:8f}\n".format(**tr_metrics))
 
@@ -170,6 +172,7 @@ def train(
             num_batches=test_num_batches, batch_size=batch_size,
             use_random_batches=False,
             device=DEVICE, loss_fn=loss_fn,
+            max_answer_len=max_answer_len,
         )
         print("TEST        loss {loss:8f}  F1 {f1:8f}  EM {exact_match:8f}\n".format(**dv_metrics))
 
@@ -190,20 +193,26 @@ def train(
         dev_f1 = dv_metrics["f1"]
         dev_em = dv_metrics["exact_match"]
 
-        if dev_f1 < best_f1 and dev_em < best_em:
+        improved = (dev_em, dev_f1) > (best_em, best_f1)
+
+        if improved:
+            patience = 0
+            best_f1 = dev_f1
+            best_em = dev_em
+            save_checkpoint(
+                save_dir, ckpt_name, model, optimizer, scheduler,
+                step0 + steps_this_block, best_f1, best_em, vars(args),
+            )
+        else:
             patience += 1
             if patience > early_stop:
                 print("Early stopping triggered.")
                 break
-        else:
-            patience = 0
-            best_f1  = max(best_f1, dev_f1)
-            best_em  = max(best_em, dev_em)
-
-        save_checkpoint(
-            save_dir, ckpt_name, model, optimizer, scheduler,
-            step0 + steps_this_block, best_f1, best_em, vars(args),
-        )
+        if not os.path.exists(os.path.join(save_dir, ckpt_name)):
+            save_checkpoint(
+                save_dir, ckpt_name, model, optimizer, scheduler,
+                step0 + steps_this_block, best_f1, best_em, vars(args),
+            )
 
         with open(os.path.join(log_dir, "answers.json"), "w") as f:
             json.dump(ans, f)

@@ -1,39 +1,62 @@
-# Assignment 1 — QANet (Fixed Submission Repo)
+# Assignment 1 — QANet (High-EM Ready Repo)
 
 **COMP5329 Deep Learning — University of Sydney, Semester 1 2026**
 
-This repository is a repaired, submission-oriented version of the provided Assignment 1 QANet codebase.
+This repository is a repaired QANet assignment codebase that has been further adjusted for **real training quality**, not just notebook executability.
 
-It is intended to help a group:
-- run the pipeline locally,
-- validate executability on Google Colab,
-- record bugs and experiments for the report,
-- and prepare the final Google Drive submission required by the assignment PDF.
+## What changed in this revision
 
-## Primary entrypoint
+To address the low-EM feedback from the mini-data / short-run setup, this repo now includes:
 
-The grading-facing notebook is:
+- **joint span decoding** during evaluation (`start <= end` and bounded answer length), instead of independent start/end argmax;
+- **best-checkpoint saving by dev EM/F1**, instead of effectively keeping only the last checkpoint;
+- **checkpoint-aware evaluation**, so `evaluate()` reuses the architecture config stored in the checkpoint;
+- a rewritten **`assignment1.ipynb`** configured for **full SQuAD v1.1 training**;
+- an updated **README** with a recommended high-EM training recipe.
+
+## Important practical conclusion
+
+If you train with:
+- `train-mini.json`
+- `glove.mini.txt`
+- `num_steps=200`
+
+then low EM is expected. That setup is suitable only for a **pipeline smoke test**.
+
+If your goal is to push EM much higher, use:
+- **full** `train-v1.1.json`
+- **full** `glove.840B.300d.txt`
+- **thousands of training steps**
+- **Adam** and a stable scheduler
+- **full dev-set evaluation** for model selection
+
+## Main notebook
+
+The main notebook is:
 - `assignment1.ipynb`
 
-Tutors are expected to run the notebook directly, so notebook executability is a hard requirement.
+It is now configured for **full-data training** by default.
 
-## Recommended workflow
+## Recommended training recipe
 
-### 1. Local-first development
-Use your local machine for:
-- code inspection and debugging,
-- experiment iteration,
-- report writing,
-- and keeping a clean git history.
+The default high-EM notebook recipe uses:
 
-### 2. Colab validation
-Use Colab for:
-- clean-environment validation,
-- notebook executability checks,
-- and optional longer training if local compute is limited.
+- full SQuAD v1.1 train/dev
+- full GloVe 840B 300d
+- `optimizer_name="adam"`
+- `scheduler_name="cosine"`
+- `batch_size=16`
+- `num_steps=12000`
+- `checkpoint=1000`
+- `test_num_batches=-1`
+- `max_answer_len=30`
 
-### 3. Final submission
-Upload the **entire corrected repository** to Google Drive and place the public sharing link on the **first page of the report**.
+If Colab memory is tight, reduce:
+- `batch_size` from `16` to `8`
+
+If results plateau too early, try:
+- `num_steps=16000` or `20000`
+- `learning_rate=5e-4`
 
 ## Quick start on Colab
 
@@ -60,86 +83,95 @@ else:
 
 Then open and run `assignment1.ipynb`.
 
-## Documentation bundle
+## Full-data pipeline summary
 
-See the `docs/` folder for the submission support materials:
-- `docs/01_总说明与运行部署指南.md`
-- `docs/02_Bug清单与报告素材.md`
-- `docs/03_实验设计与记录模板.md`
-- `docs/04_最终提交Checklist.md`
-- `docs/05_报告目录与每节写什么.md`
-- `docs/06_三组实验可直接运行命令.md`
+### 1. Download full data
+The notebook now calls:
 
-## Remaining work before submission
+```python
+from Tools.download import download
+download(data_dir="_data")
+```
 
-The codebase is repaired and the training/evaluation pipeline is runnable, but the assignment is **not fully complete until the items below are finished**.
+This downloads:
+- SQuAD `train-v1.1.json`
+- SQuAD `dev-v1.1.json`
+- GloVe `glove.840B.300d.txt`
+- the required spaCy model
 
-### Please use Colab to finish these remaining steps
-Colab should be treated as the final validation environment because tutors are expected to run the notebook directly.
+### 2. Preprocess full data
 
-### Step 1 — Re-run the final notebook in a clean Colab runtime
-Use a fresh runtime and make sure:
-- `PROJECT_ROOT` points to `/content/drive/MyDrive/Assignment1_2026_fixed`
-- `cwd` points to this repo
-- no older `Assignment1_2026` path remains in `sys.path`
+```python
+from Tools.preproc import preprocess
 
-### Step 2 — Complete at least 3 experiments
-Use the ready-made commands in:
-- `docs/06_三组实验可直接运行命令.md`
+preprocess(
+    train_file="_data/squad/train-v1.1.json",
+    dev_file="_data/squad/dev-v1.1.json",
+    glove_word_file="_data/glove/glove.840B.300d.txt",
+    target_dir="_data",
+    para_limit=400,
+    ques_limit=50,
+)
+```
 
-Recommended experiments:
-- Optimizer: `sgd` vs `adam`
-- Normalization: `layer_norm` vs `group_norm`
-- Scheduler: `step` vs `cosine`
+### 3. Train
 
-### Step 3 — Save and summarize all experiment results
-For each experiment, record:
-- hypothesis
-- configuration
-- best F1 / EM
-- final evaluation metrics
-- short analysis
+```python
+from TrainTools.train import train
 
-Use:
-- `docs/03_实验设计与记录模板.md`
+results = train(
+    train_npz="_data/train.npz",
+    dev_npz="_data/dev.npz",
+    word_emb_json="_data/word_emb.json",
+    char_emb_json="_data/char_emb.json",
+    train_eval_json="_data/train_eval.json",
+    dev_eval_json="_data/dev_eval.json",
+    save_dir="_model_full",
+    log_dir="_log_full",
+    num_steps=12000,
+    checkpoint=1000,
+    batch_size=16,
+    seed=42,
+    optimizer_name="adam",
+    scheduler_name="cosine",
+    learning_rate=1e-3,
+    loss_name="qa_nll",
+    norm_name="layer_norm",
+    test_num_batches=-1,
+    max_answer_len=30,
+)
+```
 
-### Step 4 — Write the final PDF report
-Use:
-- `docs/05_报告目录与每节写什么.md`
-- `docs/02_Bug清单与报告素材.md`
+### 4. Evaluate the best checkpoint
 
-The report must include:
-- Introduction
-- complete debugging analysis
-- at least 3 experiments
-- quantitative results
-- analytical discussion
-- conclusion
+```python
+from EvaluateTools.evaluate import evaluate
 
-### Step 5 — Upload the final full repository to Google Drive
-The final Google Drive repo should include at least:
-- source code
-- `assignment1.ipynb`
-- `requirements.txt`
-- docs and experiment records if desired
+metrics = evaluate(
+    dev_npz="_data/dev.npz",
+    word_emb_json="_data/word_emb.json",
+    char_emb_json="_data/char_emb.json",
+    dev_eval_json="_data/dev_eval.json",
+    save_dir="_model_full",
+    log_dir="_log_full",
+    ckpt_name="model.pt",
+    test_num_batches=-1,
+    max_answer_len=30,
+)
+```
 
-### Step 6 — Put the public Google Drive link on the first page of the report
-The assignment PDF explicitly requires:
-- the full corrected repository uploaded to Google Drive
-- a public access link
-- that link placed prominently on page 1 of the report
+## Smoke test mode
 
-### Step 7 — Do one final executability check in Colab
-Before submission, verify again in Colab that:
-- dependencies install cleanly
-- preprocessing runs
-- training runs
-- evaluation runs
-- notebook completes without manual patching
+If you only want to verify that the pipeline runs end-to-end quickly, you can temporarily switch back to:
+- `download_mini()`
+- `train-mini.json`
+- `glove.mini.txt`
+- `num_steps=20` or `200`
+
+But do **not** treat that configuration as a serious benchmark for EM.
 
 ## Notes
 
-- Use this repo as the **only final baseline**. Do not mix it with older broken copies.
-- For stable checkpoint saving, prefer the notebook/default training configuration in this repo.
-- If Colab imported an older copy before, restart the runtime and ensure `cwd` and `sys.path[0]` point to this repo.
-- If your local machine and Colab results disagree, trust the clean Colab validation result for final submission readiness.
+- The evaluation metric returned by this codebase is on a **0–100 scale**, not 0–1.
+- Final EM quality depends mostly on **training data scale**, **training time**, and **model selection**, not just on “whether the notebook runs”.
+- If local and Colab results differ, trust the clean Colab rerun with the same data and checkpoint settings.
