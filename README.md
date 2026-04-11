@@ -1,94 +1,75 @@
-# Assignment 1 — QANet (Training Guide)
+# Assignment 1 — QANet (Dual-Notebook Guide)
 
 **COMP5329 Deep Learning — University of Sydney, Semester 1 2026**
 
 This repository contains a repaired QANet assignment codebase plus additional fixes for:
-- evaluation decoding,
-- checkpoint selection,
-- preprocessing / embedding coverage,
-- normalization / encoder stability,
-- Colab RAM usage.
+- training / evaluation pipeline correctness,
+- label and preprocessing diagnostics,
+- checkpoint loading / saving,
+- QANet encoder stability,
+- Colab rerun reliability.
 
-The main goal of this README is to explain **how to retrain correctly** so that the latest fixes actually take effect, and how to use a high-memory Colab setup to push for better EM.
+## Which notebook should you use?
 
-**Important:** `assignment1.ipynb` is now designed to be rerun from top to bottom after a runtime restart. It includes automatic sanity gates that stop the notebook early if:
-- the repo is stale;
-- preprocessing statistics look wrong;
-- label upper bound is too low;
-- tiny-subset overfit fails.
+This repo now keeps **two notebook workflows** so you can both **finish the assignment safely** and **optionally chase stronger final metrics**.
 
----
+### 1) `assignment1.ipynb` — **submission-safe notebook**
+This is the notebook you should treat as the **main grading notebook**.
 
-## 1. What was fixed
+It follows the original project protocol more closely:
+- **train:** `train-mini.json`
+- **dev/eval:** `dev-v1.1.json`
+- **word vectors:** `glove.mini.txt`
 
-Key fixes already included in this repo:
+Use this notebook for:
+- tutor-facing reruns,
+- controlled experiments,
+- report figures / tables,
+- the safest end-to-end submission path.
 
-- **joint best-span decoding** instead of independent start/end argmax;
-- **best-checkpoint saving** by dev EM/F1 instead of effectively keeping only the last checkpoint;
-- **checkpoint-aware evaluation** so evaluation reuses saved model config;
-- **memory-friendlier dataset loading** for full-data Colab runs;
-- **channel-wise LayerNorm** for QANet tensors `[B, C, L]`;
-- **stronger encoder feed-forward network**;
-- **gradient accumulation support**;
-- **scheduler alignment with gradient accumulation**;
-- **better embedding coverage during preprocessing**:
-  - case variants like `Apple` / `apple` are matched more reliably against GloVe;
-  - remaining missing words no longer collapse into a single identical OOV vector.
+### 2) `assignment1_fullrun.ipynb` — **optional high-score notebook**
+This notebook is for an additional heavier retrain after the submission notebook is already working.
 
-Because of the preprocessing fixes, **you must rebuild `_data/` outputs before doing a serious retrain**.
+It uses:
+- **train:** `train-v1.1.json`
+- **dev/eval:** `dev-v1.1.json`
+- **word vectors:** `glove.840B.300d.txt`
 
----
-
-## 2. Important: how to make the new fixes actually take effect
-
-If you only `git pull` and continue training from old cached files, the new fixes may **not** be reflected.
-
-Before a fresh full retrain, delete old generated files:
-
-### Delete old preprocessing outputs
-- `_data/train.npz`
-- `_data/dev.npz`
-- `_data/word_emb.json`
-- `_data/char_emb.json`
-- `_data/word2idx.json`
-- `_data/char2idx.json`
-- `_data/train_eval.json`
-- `_data/dev_eval.json`
-- `_data/dev_meta.json`
-
-### Delete old training outputs
-- `_model_full/`
-- `_log_full/`
-
-Then:
-1. run full-data preprocessing again;
-2. retrain from scratch;
-3. evaluate the new best checkpoint.
+Use this notebook only if you want:
+- stronger final EM / F1,
+- an extra full-data checkpoint to report as an extended result.
 
 ---
 
-## 3. Recommended way to use this repo
+## What was fixed in the codebase?
 
-## Option A — Recommended: use `assignment1.ipynb` on Colab
+Key repairs already included in this repository:
+- correct QA loss usage,
+- correct checkpoint schema and evaluation reload,
+- improved best-span decoding,
+- corrected normalization behavior for `[B, C, L]` tensors,
+- corrected QANet encoder residual / normalization ordering,
+- stronger preprocessing / embedding coverage diagnostics,
+- tiny-subset overfit sanity check,
+- Colab-friendly rerun behavior.
 
-Main notebook:
-- `assignment1.ipynb`
+Because preprocessing and model logic changed, you should **rebuild `_data/` outputs** before any serious retraining run.
 
-### Step 0. Use GPU runtime
+---
+
+## Colab quick start
+
+### Step 0 — Use GPU runtime
 On Colab:
 - **Runtime -> Change runtime type -> GPU**
 
-Do not use CPU runtime for a serious full-data training run.
-
-### Step 1. Mount Drive
-
+### Step 1 — Mount Drive
 ```python
 from google.colab import drive
 drive.mount('/content/drive')
 ```
 
-### Step 2. Clone / update repo
-
+### Step 2 — Clone or reuse the repo
 ```python
 import os
 REPO_URL = "https://github.com/2fool/Assignment1_2026_fixed.git"
@@ -100,335 +81,126 @@ else:
     print("Already cloned")
 ```
 
-### Step 3. Install dependencies
-
+### Step 3 — Install dependencies
 ```python
 !pip install -r /content/drive/MyDrive/Assignment1_2026_fixed/requirements.txt -q
 !python -m spacy download en_core_web_sm
 ```
 
-### Step 4. Force-sync the repo and verify you are on the latest code
+### Step 4 — Open the notebook you want
+- For the main assignment workflow: **`assignment1.ipynb`**
+- For an optional stronger full-data retrain: **`assignment1_fullrun.ipynb`**
 
-```python
-import os, sys
-
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-os.chdir(PROJECT_ROOT)
-print("cwd =", os.getcwd())
-print("sys.path[0] =", sys.path[0])
-```
-
-```python
-!git -C {PROJECT_ROOT} pull origin main
-!git -C {PROJECT_ROOT} rev-parse --short HEAD
-!ls {PROJECT_ROOT}/Tools
-```
-
-You should see:
-- the repo path printed correctly;
-- the latest commit hash;
-- `data_diagnostics.py` listed inside `Tools/`.
-
-If `data_diagnostics.py` is missing:
-- you are not on the latest `main`;
-- or your notebook is pointing at the wrong repo path;
-- or Colab is still using stale state from an older runtime.
-
-In that case:
-1. **Restart runtime**
-2. re-mount Drive
-3. run the sync cell again
-
-### Step 5. Open `assignment1.ipynb` and run all sections in order
-The notebook is now meant to be rerun **directly from top to bottom** after a runtime restart. It includes:
-- full-data download;
-- cache cleanup before preprocessing;
-- preprocessing rebuild;
-- preprocessing statistics inspection;
-- tiny-subset overfit sanity check;
-- automatic assertions that stop the run early if sanity checks fail;
-- checkpoint/log cleanup before retraining;
-- training;
-- evaluation.
+Run cells **from top to bottom** after a clean runtime restart.
 
 ---
 
-## Option B — Run manually
+## Recommended workflow
 
-### 1) Download full data
+### Workflow A — Main assignment / report workflow
+Use **`assignment1.ipynb`**.
 
-```python
-from Tools.download import download
-download(data_dir="_data")
-```
+It already includes:
+- repo sync,
+- preprocessing rebuild,
+- preprocessing statistics checks,
+- label upper-bound sanity checks,
+- tiny-subset overfit sanity checks,
+- training,
+- final evaluation.
 
-This downloads:
-- SQuAD `train-v1.1.json`
-- SQuAD `dev-v1.1.json`
-- GloVe `glove.840B.300d.txt`
-- spaCy model dependency
+This is the safest notebook for:
+- reproducibility,
+- experiments,
+- submission executability.
 
-### 2) Clear old generated files before preprocessing
+### Workflow B — Optional stronger final checkpoint
+Use **`assignment1_fullrun.ipynb`** only after Workflow A is healthy.
 
-```python
-from pathlib import Path
-
-for path in [
-    "_data/train.npz", "_data/dev.npz",
-    "_data/word_emb.json", "_data/char_emb.json",
-    "_data/word2idx.json", "_data/char2idx.json",
-    "_data/train_eval.json", "_data/dev_eval.json", "_data/dev_meta.json",
-]:
-    p = Path(path)
-    if p.exists():
-        p.unlink()
-```
-
-### 3) Rebuild preprocessing outputs
-
-```python
-from Tools.preproc import preprocess
-
-preprocess(
-    train_file="_data/squad/train-v1.1.json",
-    dev_file="_data/squad/dev-v1.1.json",
-    glove_word_file="_data/glove/glove.840B.300d.txt",
-    target_dir="_data",
-    para_limit=400,
-    ques_limit=50,
-)
-```
-
-### 3.5. Before the long run: inspect preprocess stats, check label upper bound, and run a tiny overfit check
-
-After rebuilding `_data/`, check:
-- `_data/preprocess_stats.json`
-- how many word embeddings were matched from pretrained GloVe vs randomly initialized
-- how many train/dev records were actually built after filtering
-
-Then check the *label upper bound*:
-
-```python
-from Tools.data_diagnostics import label_upper_bound
-
-train_label_upper = label_upper_bound("_data/train.npz", "_data/train_eval.json", limit=2000)
-dev_label_upper = label_upper_bound("_data/dev.npz", "_data/dev_eval.json", limit=2000)
-
-print(train_label_upper)
-print(dev_label_upper)
-```
-
-If you get:
-
-```python
-ModuleNotFoundError: No module named 'Tools.data_diagnostics'
-```
-
-that is almost always an **environment sync problem**, not a model bug.
-
-Fix it by:
-1. restarting the Colab runtime;
-2. re-running the repo sync cell;
-3. confirming `PROJECT_ROOT/Tools/data_diagnostics.py` exists;
-4. then importing again.
-
-Interpretation:
-- if the decoded gold spans already have very low EM/F1 against the official answers, then preprocessing labels are misaligned;
-- in that case, a long training run will not fix the problem.
-
-Then run the tiny-subset overfit check before the expensive full run:
-
-After rebuilding `_data/`, check:
-- `_data/preprocess_stats.json`
-- how many word embeddings were matched from pretrained GloVe vs randomly initialized
-- how many train/dev records were actually built after filtering
-
-Then run the tiny-subset overfit check before the expensive full run:
-
-```python
-from TrainTools.overfit_check import overfit_check
-
-overfit_results = overfit_check(
-    train_npz="_data/train.npz",
-    word_emb_json="_data/word_emb.json",
-    char_emb_json="_data/char_emb.json",
-    train_eval_json="_data/train_eval.json",
-    subset_size=16,
-    save_dir="_overfit_check",
-    log_dir="_overfit_log",
-    num_steps=1000,
-    checkpoint=200,
-    batch_size=8,
-    learning_rate=5e-3,
-    dropout=0.0,
-    dropout_char=0.0,
-    scheduler_name="lambda",
-)
-```
-
-Expected behavior:
-- the notebook now uses an intentionally easier overfit setting: small subset, more steps, no dropout, constant LR;
-- F1 / EM should rise sharply on this tiny subset;
-- the notebook asserts that this tiny-subset check must pass before the long run;
-- if it still does not pass, that strongly suggests a remaining model bug rather than a simple hyperparameter issue.
-
-### 4) Clear old checkpoints/logs before a fresh retrain
-
-```python
-from pathlib import Path
-import shutil
-
-for path in ["_model_full", "_log_full"]:
-    p = Path(path)
-    if p.exists():
-        shutil.rmtree(p)
-
-Path("_model_full").mkdir(exist_ok=True)
-Path("_log_full").mkdir(exist_ok=True)
-```
-
-### 5) Train
-
-#### Preferred configuration for a high-memory GPU runtime
-
-```python
-from TrainTools.train import train
-
-results = train(
-    train_npz="_data/train.npz",
-    dev_npz="_data/dev.npz",
-    word_emb_json="_data/word_emb.json",
-    char_emb_json="_data/char_emb.json",
-    train_eval_json="_data/train_eval.json",
-    dev_eval_json="_data/dev_eval.json",
-    save_dir="_model_full",
-    log_dir="_log_full",
-    num_steps=20000,
-    checkpoint=2000,
-    batch_size=32,
-    grad_accum_steps=1,
-    seed=42,
-    optimizer_name="adam",
-    scheduler_name="cosine",
-    learning_rate=1e-3,
-    loss_name="qa_nll",
-    norm_name="layer_norm",
-    test_num_batches=-1,
-    max_answer_len=30,
-)
-```
-
-#### Fallback configuration if batch size 32 runs out of memory
-
-```python
-results = train(
-    train_npz="_data/train.npz",
-    dev_npz="_data/dev.npz",
-    word_emb_json="_data/word_emb.json",
-    char_emb_json="_data/char_emb.json",
-    train_eval_json="_data/train_eval.json",
-    dev_eval_json="_data/dev_eval.json",
-    save_dir="_model_full",
-    log_dir="_log_full",
-    num_steps=22000,
-    checkpoint=2000,
-    batch_size=16,
-    grad_accum_steps=1,
-    seed=42,
-    optimizer_name="adam",
-    scheduler_name="cosine",
-    learning_rate=1e-3,
-    loss_name="qa_nll",
-    norm_name="layer_norm",
-    test_num_batches=-1,
-    max_answer_len=30,
-)
-```
-
-Reason:
-- `batch_size=32` is preferred on a very large-memory Colab runtime because it exposes much more data per step and reaches multiple epochs faster;
-- if memory is tighter than expected, fall back to `batch_size=16`;
-- use `grad_accum_steps>1` only when memory becomes the bottleneck again.
-
-### 6) Evaluate
-
-```python
-from EvaluateTools.evaluate import evaluate
-
-metrics = evaluate(
-    dev_npz="_data/dev.npz",
-    word_emb_json="_data/word_emb.json",
-    char_emb_json="_data/char_emb.json",
-    dev_eval_json="_data/dev_eval.json",
-    save_dir="_model_full",
-    log_dir="_log_full",
-    ckpt_name="model.pt",
-    test_num_batches=-1,
-    max_answer_len=30,
-)
-```
+That notebook keeps the same sanity philosophy but switches to a **full-data training run**.
 
 ---
 
-## 4. Recommended high-resource training setup
+## Dataset protocol summary
 
-For the current large-memory Colab runtime, the recommended aggressive configuration is:
-- `batch_size=32`
-- `grad_accum_steps=1`
-- `num_steps=20000`
-- `checkpoint=2000`
-- `optimizer_name="adam"`
-- `scheduler_name="cosine"`
-- `learning_rate=1e-3`
-- `test_num_batches=-1`
-- `max_answer_len=30`
-
-If `batch_size=32` unexpectedly runs out of memory, fall back to:
-- `batch_size=16`
-- `grad_accum_steps=1`
-- `num_steps=22000`
-
-If the model is still improving late in training, try:
-- `num_steps=24000` or `30000`
-
-If training is unstable, try:
-- `learning_rate=5e-4`
-
----
-
-## 5. What to expect
-
-- Metrics are printed on a **0–100 percentage scale**.
-  - Example: `F1 4.7%` means `4.7 percent`, not `4.7 out of 1`.
-- A final result around **F1 4.9% / EM 1.3%** is still abnormally low for a repaired QA system.
-- If results remain that low after following the full retrain process above, do **not** continue from the same checkpoint; instead verify:
-  - you rebuilt preprocessing outputs;
-  - you are not evaluating stale checkpoints;
-  - you are using the latest `main` branch.
-
----
-
-## 6. Smoke test mode
-
-If you only need a fast pipeline check, you can temporarily switch back to:
+### Submission-safe notebook (`assignment1.ipynb`)
 - `download_mini()`
-- `train-mini.json`
-- `glove.mini.txt`
-- `num_steps=20` or `200`
+- `_data/squad/train-mini.json`
+- `_data/squad/dev-v1.1.json`
+- `_data/glove/glove.mini.txt`
 
-But that mode is only for:
-- dependency checks;
-- notebook executability checks;
-- smoke tests.
-
-It is **not** the recommended setup for trying to recover EM.
+### Full-data notebook (`assignment1_fullrun.ipynb`)
+- `download()`
+- `_data/squad/train-v1.1.json`
+- `_data/squad/dev-v1.1.json`
+- `_data/glove/glove.840B.300d.txt`
 
 ---
 
-## 7. Notes
+## Important sanity gates
 
-- Full-data SQuAD is memory-heavy on Colab.
-- This repo reduces RAM pressure, but full-data training is still much heavier than mini-data smoke tests.
-- If local and Colab results disagree, trust a clean Colab rerun using the same configuration and rebuilt `_data/` outputs.
+Both notebooks are designed to stop early if major assumptions fail.
+
+### 1) Preprocess stats sanity
+Checks that:
+- enough records were built,
+- embedding coverage is not suspiciously low.
+
+### 2) Label upper bound sanity
+Decodes stored gold `(y1, y2)` spans back into text and compares them to the official answers.
+
+If this upper bound is poor, long training is not trustworthy.
+
+### 3) Tiny-subset overfit sanity
+This is **not** the final assignment dataset.
+It is a debugging gate that asks whether the model can memorize a tiny real subset.
+
+If this fails, the model implementation is still broken and you should not continue into long training.
+
+---
+
+## Output directories
+
+### Submission-safe notebook
+- model dir: `_model_mini/`
+- log dir: `_log_mini/`
+
+### Full-data notebook
+- model dir: `_model_full/`
+- log dir: `_log_full/`
+
+---
+
+## Suggested reporting strategy
+
+A strong and safe submission usually looks like this:
+
+1. Use **`assignment1.ipynb`** for the main report experiments.
+2. Run your controlled comparisons there (optimizer / scheduler / normalization, etc.).
+3. If time and resources permit, add one extra **full-data result** from `assignment1_fullrun.ipynb` as an extended stronger checkpoint.
+
+That gives you:
+- a notebook tutors can rerun reliably,
+- experiments that are easier to compare cleanly,
+- optional stronger final EM/F1 from the full-data path.
+
+---
+
+## Practical notes
+
+- If local and Colab results disagree, trust a **clean Colab rerun** with rebuilt `_data/` outputs.
+- If the sync cell does not show the expected latest files, **restart the runtime** and rerun from the top.
+- If you switch between the two notebooks, remember that they intentionally use **different datasets and output directories**.
+- Full-data training is much heavier than the submission-safe mini-data workflow.
+
+---
+
+## Repository structure highlights
+
+- `assignment1.ipynb` — main submission notebook
+- `assignment1_fullrun.ipynb` — optional full-data notebook
+- `TrainTools/overfit_check.py` — tiny-subset overfit gate
+- `Tools/data_diagnostics.py` — label upper-bound diagnostics
+- `TrainTools/train.py` — training entry point
+- `EvaluateTools/evaluate.py` — checkpoint evaluation entry point
+
