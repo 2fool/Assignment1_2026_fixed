@@ -101,7 +101,41 @@ else:
 !python -m spacy download en_core_web_sm
 ```
 
-### Step 4. Open `assignment1.ipynb` and run all sections in order
+### Step 4. Force-sync the repo and verify you are on the latest code
+
+```python
+import os, sys
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+os.chdir(PROJECT_ROOT)
+print("cwd =", os.getcwd())
+print("sys.path[0] =", sys.path[0])
+```
+
+```python
+!git -C {PROJECT_ROOT} pull origin main
+!git -C {PROJECT_ROOT} rev-parse --short HEAD
+!ls {PROJECT_ROOT}/Tools
+```
+
+You should see:
+- the repo path printed correctly;
+- the latest commit hash;
+- `data_diagnostics.py` listed inside `Tools/`.
+
+If `data_diagnostics.py` is missing:
+- you are not on the latest `main`;
+- or your notebook is pointing at the wrong repo path;
+- or Colab is still using stale state from an older runtime.
+
+In that case:
+1. **Restart runtime**
+2. re-mount Drive
+3. run the sync cell again
+
+### Step 5. Open `assignment1.ipynb` and run all sections in order
 The notebook now includes:
 - full-data download;
 - cache cleanup before preprocessing;
@@ -178,6 +212,20 @@ dev_label_upper = label_upper_bound("_data/dev.npz", "_data/dev_eval.json", limi
 print(train_label_upper)
 print(dev_label_upper)
 ```
+
+If you get:
+
+```python
+ModuleNotFoundError: No module named 'Tools.data_diagnostics'
+```
+
+that is almost always an **environment sync problem**, not a model bug.
+
+Fix it by:
+1. restarting the Colab runtime;
+2. re-running the repo sync cell;
+3. confirming `PROJECT_ROOT/Tools/data_diagnostics.py` exists;
+4. then importing again.
 
 Interpretation:
 - if the decoded gold spans already have very low EM/F1 against the official answers, then preprocessing labels are misaligned;
