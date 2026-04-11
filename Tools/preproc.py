@@ -158,6 +158,12 @@ def get_embedding(counter: Counter, data_type: str, limit: int = -1,
     print(f"Generating {data_type} embedding…")
     embedding_dict = {}
     filtered_elements = [k for k, v in counter.items() if v > limit]
+    stats = {
+        "data_type": data_type,
+        "kept_tokens": len(filtered_elements),
+        "pretrained_hits": 0,
+        "random_inits": 0,
+    }
 
     if emb_file is not None:
         assert vec_size is not None
@@ -175,17 +181,22 @@ def get_embedding(counter: Counter, data_type: str, limit: int = -1,
                     for token in variant_to_tokens[word]:
                         if token not in embedding_dict:
                             embedding_dict[token] = vector
+                            stats["pretrained_hits"] += 1
 
         missing_tokens = [tok for tok in filtered_elements if tok not in embedding_dict]
         for token in missing_tokens:
             embedding_dict[token] = [float(x) for x in np.random.normal(scale=0.1, size=vec_size)]
+        stats["random_inits"] = len(missing_tokens)
 
-        print(f"  {len(embedding_dict)} / {len(filtered_elements)} tokens have "
-              f"a corresponding {data_type} embedding vector")
+        print(
+            f"  {stats['pretrained_hits']} pretrained + {stats['random_inits']} random "
+            f"= {len(embedding_dict)} / {len(filtered_elements)} {data_type} vectors"
+        )
     else:
         assert vec_size is not None
         for token in filtered_elements:
             embedding_dict[token] = [np.random.normal(scale=0.1) for _ in range(vec_size)]
+        stats["random_inits"] = len(filtered_elements)
         print(f"  {len(filtered_elements)} tokens have a corresponding embedding vector")
 
     null_tok, oov_tok = "--NULL--", "--OOV--"
@@ -196,7 +207,8 @@ def get_embedding(counter: Counter, data_type: str, limit: int = -1,
     embedding_dict[oov_tok] = [0.0] * vec_size
     idx2emb = {idx: embedding_dict[tok] for tok, idx in token2idx.items()}
     emb_mat = [idx2emb[i] for i in range(len(idx2emb))]
-    return emb_mat, token2idx
+    stats["vocab_size_with_specials"] = len(token2idx)
+    return emb_mat, token2idx, stats
 
 
 def build_features(examples, data_type: str, out_file: str,
@@ -398,13 +410,13 @@ def preprocess(
     char_emb_source = glove_char_file if pretrained_char else None
     char_emb_dim = glove_dim if pretrained_char else char_dim
 
-    word_emb_mat, word2idx = get_embedding(
+    word_emb_mat, word2idx, word_emb_stats = get_embedding(
         word_counter, "word",
         limit=word_count_limit,
         emb_file=word_emb_source,
         vec_size=glove_dim,
     )
-    char_emb_mat, char2idx = get_embedding(
+    char_emb_mat, char2idx, char_emb_stats = get_embedding(
         char_counter, "char",
         limit=char_count_limit,
         emb_file=char_emb_source,
@@ -431,6 +443,18 @@ def preprocess(
     save_json(out["word2idx_file"],   word2idx,      "word dictionary")
     save_json(out["char2idx_file"],   char2idx,      "char dictionary")
     save_json(out["dev_meta_file"],   dev_meta,      "dev meta")
+    save_json(
+        os.path.join(target_dir, "preprocess_stats.json"),
+        {
+            "train_examples_total": len(train_examples),
+            "dev_examples_total": len(dev_examples),
+            "train_record_count": int(np.load(out["train_record_file"])["ids"].shape[0]),
+            "dev_record_count": int(np.load(out["dev_record_file"])["ids"].shape[0]),
+            "word_embedding": word_emb_stats,
+            "char_embedding": char_emb_stats,
+        },
+        "preprocess stats",
+    )
 
     print("\nPreprocessing complete.")
     print(f"  Outputs → {target_dir}/")

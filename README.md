@@ -106,6 +106,8 @@ The notebook now includes:
 - full-data download;
 - cache cleanup before preprocessing;
 - preprocessing rebuild;
+- preprocessing statistics inspection;
+- tiny-subset overfit sanity check;
 - checkpoint/log cleanup before retraining;
 - training;
 - evaluation.
@@ -157,6 +159,37 @@ preprocess(
     ques_limit=50,
 )
 ```
+
+### 3.5. Before the long run: inspect preprocess stats and run a tiny overfit check
+
+After rebuilding `_data/`, check:
+- `_data/preprocess_stats.json`
+- how many word embeddings were matched from pretrained GloVe vs randomly initialized
+- how many train/dev records were actually built after filtering
+
+Then run the tiny-subset overfit check before the expensive full run:
+
+```python
+from TrainTools.overfit_check import overfit_check
+
+overfit_results = overfit_check(
+    train_npz="_data/train.npz",
+    word_emb_json="_data/word_emb.json",
+    char_emb_json="_data/char_emb.json",
+    train_eval_json="_data/train_eval.json",
+    subset_size=64,
+    save_dir="_overfit_check",
+    log_dir="_overfit_log",
+    num_steps=400,
+    checkpoint=100,
+    batch_size=16,
+    learning_rate=3e-3,
+)
+```
+
+Expected behavior:
+- F1 / EM should rise sharply on this tiny subset;
+- if they stay near random, do **not** launch the long full-data run yet.
 
 ### 4) Clear old checkpoints/logs before a fresh retrain
 
