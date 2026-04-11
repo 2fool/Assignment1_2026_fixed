@@ -9,7 +9,7 @@ This repository contains a repaired QANet assignment codebase plus additional fi
 - normalization / encoder stability,
 - Colab RAM usage.
 
-The main goal of this README is to explain **how to retrain correctly** so that the latest fixes actually take effect.
+The main goal of this README is to explain **how to retrain correctly** so that the latest fixes actually take effect, and how to use a high-memory Colab setup to push for better EM.
 
 ---
 
@@ -175,7 +175,7 @@ Path("_log_full").mkdir(exist_ok=True)
 
 ### 5) Train
 
-#### Preferred configuration if GPU memory allows it
+#### Preferred configuration for a high-memory GPU runtime
 
 ```python
 from TrainTools.train import train
@@ -189,9 +189,9 @@ results = train(
     dev_eval_json="_data/dev_eval.json",
     save_dir="_model_full",
     log_dir="_log_full",
-    num_steps=22000,
+    num_steps=20000,
     checkpoint=2000,
-    batch_size=8,
+    batch_size=32,
     grad_accum_steps=1,
     seed=42,
     optimizer_name="adam",
@@ -204,7 +204,7 @@ results = train(
 )
 ```
 
-#### Fallback configuration if batch size 8 runs out of memory
+#### Fallback configuration if batch size 32 runs out of memory
 
 ```python
 results = train(
@@ -216,10 +216,10 @@ results = train(
     dev_eval_json="_data/dev_eval.json",
     save_dir="_model_full",
     log_dir="_log_full",
-    num_steps=44000,
-    checkpoint=4000,
-    batch_size=4,
-    grad_accum_steps=2,
+    num_steps=22000,
+    checkpoint=2000,
+    batch_size=16,
+    grad_accum_steps=1,
     seed=42,
     optimizer_name="adam",
     scheduler_name="cosine",
@@ -232,8 +232,9 @@ results = train(
 ```
 
 Reason:
-- `batch_size=8` is preferred because it exposes more data per step;
-- if memory is limited, `batch_size=4 + grad_accum_steps=2` gives a similar effective batch size, but needs more total steps.
+- `batch_size=32` is preferred on a very large-memory Colab runtime because it exposes much more data per step and reaches multiple epochs faster;
+- if memory is tighter than expected, fall back to `batch_size=16`;
+- use `grad_accum_steps>1` only when memory becomes the bottleneck again.
 
 ### 6) Evaluate
 
@@ -255,7 +256,33 @@ metrics = evaluate(
 
 ---
 
-## 4. What to expect
+## 4. Recommended high-resource training setup
+
+For the current large-memory Colab runtime, the recommended aggressive configuration is:
+- `batch_size=32`
+- `grad_accum_steps=1`
+- `num_steps=20000`
+- `checkpoint=2000`
+- `optimizer_name="adam"`
+- `scheduler_name="cosine"`
+- `learning_rate=1e-3`
+- `test_num_batches=-1`
+- `max_answer_len=30`
+
+If `batch_size=32` unexpectedly runs out of memory, fall back to:
+- `batch_size=16`
+- `grad_accum_steps=1`
+- `num_steps=22000`
+
+If the model is still improving late in training, try:
+- `num_steps=24000` or `30000`
+
+If training is unstable, try:
+- `learning_rate=5e-4`
+
+---
+
+## 5. What to expect
 
 - Metrics are printed on a **0–100 percentage scale**.
   - Example: `F1 4.7%` means `4.7 percent`, not `4.7 out of 1`.
@@ -267,7 +294,7 @@ metrics = evaluate(
 
 ---
 
-## 5. Smoke test mode
+## 6. Smoke test mode
 
 If you only need a fast pipeline check, you can temporarily switch back to:
 - `download_mini()`
@@ -284,7 +311,7 @@ It is **not** the recommended setup for trying to recover EM.
 
 ---
 
-## 6. Notes
+## 7. Notes
 
 - Full-data SQuAD is memory-heavy on Colab.
 - This repo reduces RAM pressure, but full-data training is still much heavier than mini-data smoke tests.
