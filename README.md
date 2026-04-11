@@ -155,6 +155,8 @@ This downloads:
 
 ### 2) Preprocess full data
 
+> If you pulled a newer version of this repo, re-run preprocessing from scratch so that `word_emb.json`, `word2idx.json`, `train.npz`, and `dev.npz` are rebuilt with the latest embedding / vocab logic.
+
 ```python
 from Tools.preproc import preprocess
 

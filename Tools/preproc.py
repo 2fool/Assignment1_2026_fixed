@@ -132,13 +132,25 @@ def get_embedding(counter: Counter, data_type: str, limit: int = -1,
 
     if emb_file is not None:
         assert vec_size is not None
+        variant_to_tokens = {}
+        for token in filtered_elements:
+            for variant in dict.fromkeys((token, token.lower(), token.capitalize(), token.upper())):
+                variant_to_tokens.setdefault(variant, []).append(token)
+
         with open(emb_file, "r", encoding="utf-8") as fh:
             for line in tqdm(fh):
                 array = line.split()
                 word = "".join(array[:-vec_size])
                 vector = list(map(float, array[-vec_size:]))
-                if word in counter and counter[word] > limit:
-                    embedding_dict[word] = vector
+                if word in variant_to_tokens:
+                    for token in variant_to_tokens[word]:
+                        if token not in embedding_dict:
+                            embedding_dict[token] = vector
+
+        missing_tokens = [tok for tok in filtered_elements if tok not in embedding_dict]
+        for token in missing_tokens:
+            embedding_dict[token] = [float(x) for x in np.random.normal(scale=0.1, size=vec_size)]
+
         print(f"  {len(embedding_dict)} / {len(filtered_elements)} tokens have "
               f"a corresponding {data_type} embedding vector")
     else:
