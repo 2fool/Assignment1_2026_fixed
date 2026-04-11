@@ -23,7 +23,15 @@ from Models import QANet
 from EvaluateTools.eval_utils import run_eval
 
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def _get_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+DEVICE = _get_device()
 
 
 ARCH_KEYS = {

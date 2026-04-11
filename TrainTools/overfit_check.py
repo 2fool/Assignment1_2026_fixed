@@ -64,7 +64,7 @@ def overfit_check(
         _slice_npz(train_npz, sub_npz, subset_size)
         _slice_eval(train_eval_json, sub_eval, ids)
 
-        results = train(
+        train_defaults = dict(
             train_npz=sub_npz,
             dev_npz=sub_npz,
             word_emb_json=word_emb_json,
@@ -85,8 +85,10 @@ def overfit_check(
             test_num_batches=-1,
             max_answer_len=30,
             early_stop=100,
-            **train_kwargs,
         )
+        train_defaults.update(train_kwargs)
+
+        results = train(**train_defaults)
 
         metrics = evaluate(
             dev_npz=sub_npz,

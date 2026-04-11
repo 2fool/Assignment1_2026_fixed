@@ -23,7 +23,15 @@ from EvaluateTools.eval_utils import run_eval
 from TrainTools.train_utils import train_single_epoch, save_checkpoint
 
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def _get_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+DEVICE = _get_device()
 
 
 def train(

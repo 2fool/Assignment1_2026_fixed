@@ -101,35 +101,40 @@ class EncoderBlock(nn.Module):
         self.pos = PosEncoder(d_model, length)
         self.act = get_activation(act_name)
 
-        # Normalization over [C, L]; fixed length required for layer_norm.
-        self.normb = get_norm(norm_name, d_model, length, num_groups=norm_groups)
-        self.norms = nn.ModuleList([get_norm(norm_name, d_model, length, num_groups=norm_groups) for _ in range(conv_num)])
-        self.norme = get_norm(norm_name, d_model, length, num_groups=norm_groups)
+        # QANet uses pre-norm residual sublayers. Normalizing after the
+        # residual repeatedly washes out question-conditioned differences in
+        # the model encoder, especially when multiple questions share the same
+        # context paragraph. We therefore keep a separate norm in front of
+        # every sublayer.
+        self.conv_norms = nn.ModuleList(
+            [get_norm(norm_name, d_model, length, num_groups=norm_groups) for _ in range(conv_num)]
+        )
+        self.att_norm = get_norm(norm_name, d_model, length, num_groups=norm_groups)
+        self.ffn_norm = get_norm(norm_name, d_model, length, num_groups=norm_groups)
+
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         out = self.pos(x)
-        out = self.normb(out)
 
         for i, conv in enumerate(self.convs):
             res = out
-            out = conv(out)
-            out = self.act(out)
-            out = out + res
-            out = self.conv_drops[i](out)
-            out = self.norms[i](out)
+            conv_in = self.conv_norms[i](out)
+            conv_out = conv(conv_in)
+            conv_out = self.act(conv_out)
+            conv_out = self.conv_drops[i](conv_out)
+            out = res + conv_out
 
         res = out
-        out = self.self_att(out, mask)
-        out = out + res
-        out = self.drop(out)
+        att_in = self.att_norm(out)
+        att_out = self.self_att(att_in, mask)
+        att_out = self.drop(att_out)
+        out = res + att_out
 
         res = out
-        out = self.norme(out)
-        out = out.transpose(1, 2)
-        out = self.ffn1(out)
-        out = self.act(out)
-        out = self.ffn_drop(out)
-        out = self.ffn2(out)
-        out = out.transpose(1, 2)
-        out = out + res
-        out = self.drop(out)
+        ffn_in = self.ffn_norm(out).transpose(1, 2)
+        ffn_out = self.ffn1(ffn_in)
+        ffn_out = self.act(ffn_out)
+        ffn_out = self.ffn_drop(ffn_out)
+        ffn_out = self.ffn2(ffn_out).transpose(1, 2)
+        ffn_out = self.drop(ffn_out)
+        out = res + ffn_out
         return out
