@@ -157,5 +157,5 @@ def evaluate(
     with open(os.path.join(log_dir, "answers.json"), "w") as f:
         json.dump(ans, f)
 
-    print("TEST  loss {loss:.6f}  F1 {f1:.6f}  EM {exact_match:.6f}".format(**metrics))
+    print("TEST  loss {loss:.6f}  F1 {f1:.3f}%  EM {exact_match:.3f}%".format(**metrics))
     return {"f1": metrics["f1"], "exact_match": metrics["exact_match"], "loss": metrics["loss"]}

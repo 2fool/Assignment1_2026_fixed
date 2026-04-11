@@ -23,6 +23,7 @@ This is important because extractive QA should choose the **best valid span**, n
 #### `TrainTools/train.py`
 - changed checkpoint logic to save the **best checkpoint by dev performance** instead of effectively keeping only the last one;
 - added `max_answer_len` into the training/evaluation flow;
+- added `grad_accum_steps` so Colab can simulate a larger effective batch size without increasing peak memory;
 - improved model-selection behavior for long training runs.
 
 #### `EvaluateTools/evaluate.py`
@@ -128,12 +129,12 @@ The notebook is already configured for:
 - best-checkpoint evaluation.
 
 For standard Colab memory, start conservatively:
-- `batch_size=4`
+- `batch_size=2`
+- `grad_accum_steps=4` (effective batch size = 8)
 
 If runtime memory is still tight:
-- reduce `batch_size` to `2`
-
-Only increase batch size above `4` if the runtime clearly has enough memory.
+- keep `batch_size=2` and lower `num_steps` only for smoke testing
+- or try `batch_size=4` with `grad_accum_steps=2` if the runtime clearly has enough memory
 
 ---
 
@@ -183,7 +184,8 @@ results = train(
     log_dir="_log_full",
     num_steps=12000,
     checkpoint=1000,
-    batch_size=16,
+    batch_size=2,
+    grad_accum_steps=4,
     seed=42,
     optimizer_name="adam",
     scheduler_name="cosine",
@@ -222,14 +224,16 @@ Current recommended starting recipe:
 - full GloVe 840B 300d
 - `optimizer_name="adam"`
 - `scheduler_name="cosine"`
-- `batch_size=4`
+- `batch_size=2`
+- `grad_accum_steps=4` (effective batch size = 8)
 - `num_steps=12000`
 - `checkpoint=1000`
 - `test_num_batches=-1`
 - `max_answer_len=30`
 
 If Colab memory is not enough:
-- reduce `batch_size` from `4` to `2`
+- keep `batch_size=2`
+- reduce `grad_accum_steps` only if you need a faster smoke test rather than a strong final run
 
 If the model is still improving late in training:
 - increase `num_steps` to `16000` or `20000`
@@ -262,6 +266,7 @@ It should **not** be used as the final training setup for EM comparison.
 - Full-data SQuAD is memory-heavy on Colab.
 - This repo now uses a more memory-friendly dataset loading path, but full-data
   training is still far heavier than the previous mini-data smoke-test setup.
+- F1 / EM are printed on a **0–100 percentage scale**, e.g. `4.5` means `4.5%`, not `4.5x`.
 - Final EM depends mostly on:
   - training data scale,
   - training duration,

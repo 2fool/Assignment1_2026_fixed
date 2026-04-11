@@ -47,6 +47,7 @@ def train(
     max_answer_len:     int   = 30,
     seed:               int   = 42,
     grad_clip:          float = 5.0,
+    grad_accum_steps:   int   = 1,
     early_stop:         int   = 10,
 
     # ── DL technique selection (string registry keys) ─────────────────────────
@@ -155,6 +156,7 @@ def train(
         train_loss = train_single_epoch(
             model, optimizer, scheduler, _train_iter,
             steps_this_block, grad_clip, loss_fn, DEVICE,
+            grad_accum_steps=grad_accum_steps,
             global_step=step0,
         )
 
@@ -165,7 +167,7 @@ def train(
             device=DEVICE, loss_fn=loss_fn,
             max_answer_len=max_answer_len,
         )
-        print("VALID(train) loss {loss:8f}  F1 {f1:8f}  EM {exact_match:8f}\n".format(**tr_metrics))
+        print("VALID(train) loss {loss:8f}  F1 {f1:8.3f}%  EM {exact_match:8.3f}%\n".format(**tr_metrics))
 
         dv_metrics, ans = run_eval(
             model, dev_dataset, dev_eval,
@@ -174,7 +176,7 @@ def train(
             device=DEVICE, loss_fn=loss_fn,
             max_answer_len=max_answer_len,
         )
-        print("TEST        loss {loss:8f}  F1 {f1:8f}  EM {exact_match:8f}\n".format(**dv_metrics))
+        print("TEST        loss {loss:8f}  F1 {f1:8.3f}%  EM {exact_match:8.3f}%\n".format(**dv_metrics))
 
         current_lr = scheduler.get_last_lr()
         print("Learning rate:", current_lr)
@@ -217,7 +219,7 @@ def train(
         with open(os.path.join(log_dir, "answers.json"), "w") as f:
             json.dump(ans, f)
 
-    print(f"Training finished.  Best F1: {best_f1:.4f}  Best EM: {best_em:.4f}")
+    print(f"Training finished.  Best F1: {best_f1:.3f}%  Best EM: {best_em:.3f}%")
 
     return {
         "best_f1":   best_f1,

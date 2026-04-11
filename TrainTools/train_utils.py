@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 def train_single_epoch(model, optimizer, scheduler, data_iter,
                        steps, grad_clip, loss_fn, device,
+                       grad_accum_steps: int = 1,
                        global_step: int = 0) -> float:
     """
     Run one block of `steps` training iterations consuming from `data_iter`.
@@ -18,10 +19,9 @@ def train_single_epoch(model, optimizer, scheduler, data_iter,
     """
     model.train()
     loss_list = []
+    optimizer.zero_grad(set_to_none=True)
 
-    for _ in tqdm(range(steps), total=steps):
-        optimizer.zero_grad(set_to_none=True)
-
+    for local_step in tqdm(range(steps), total=steps):
         Cwid, Ccid, Qwid, Qcid, y1, y2, _ = next(data_iter)
         Cwid, Ccid = Cwid.to(device), Ccid.to(device)
         Qwid, Qcid = Qwid.to(device), Qcid.to(device)
@@ -31,11 +31,15 @@ def train_single_epoch(model, optimizer, scheduler, data_iter,
         loss   = loss_fn(p1, p2, y1, y2)
         loss_list.append(float(loss.item()))
 
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        optimizer.step()
-        if scheduler is not None:
-            scheduler.step()
+        (loss / grad_accum_steps).backward()
+
+        should_step = ((local_step + 1) % grad_accum_steps == 0) or (local_step + 1 == steps)
+        if should_step:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
+            optimizer.zero_grad(set_to_none=True)
 
     mean_loss = float(np.mean(loss_list))
     print(f"STEP {global_step + steps:8d}  loss {mean_loss:8f}\n")
