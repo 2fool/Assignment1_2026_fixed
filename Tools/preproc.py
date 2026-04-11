@@ -29,6 +29,11 @@ import numpy as np
 import ujson as json
 from tqdm import tqdm
 
+try:
+    import spacy
+except Exception:
+    spacy = None
+
 
 """
 The preprocessing logic is mostly adapted from:
@@ -37,6 +42,7 @@ https://github.com/HKUST-KnowComp/R-Net/blob/master/prepro.py
 
 
 _TOKENIZER = re.compile(r"\w+|[^\w\s]", re.UNICODE)
+_SPACY_NLP = None
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +56,29 @@ def ensure_parent(path: str) -> None:
 
 
 def word_tokenize(sent: str):
+    global _SPACY_NLP
+
+    if spacy is not None:
+        if _SPACY_NLP is None:
+            try:
+                # Prefer the installed English pipeline when available because
+                # its tokenizer exceptions are closer to the intended SQuAD
+                # preprocessing behavior.
+                _SPACY_NLP = spacy.load(
+                    "en_core_web_sm",
+                    disable=["tagger", "parser", "attribute_ruler", "lemmatizer", "ner", "textcat"],
+                )
+            except Exception:
+                try:
+                    # Fallback: still use spaCy's English tokenizer rules even
+                    # if the full model is not installed.
+                    _SPACY_NLP = spacy.blank("en")
+                except Exception:
+                    _SPACY_NLP = False
+
+        if _SPACY_NLP:
+            return [tok.text for tok in _SPACY_NLP.make_doc(sent) if not tok.is_space]
+
     return _TOKENIZER.findall(sent)
 
 
