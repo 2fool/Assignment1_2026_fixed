@@ -1,106 +1,87 @@
-# Assignment 1 — QANet (High-EM Ready Repo)
+# Assignment 1 — QANet (Training Guide)
 
 **COMP5329 Deep Learning — University of Sydney, Semester 1 2026**
 
-This repository is a repaired QANet assignment codebase that has been further adjusted for **higher-quality training**, not just notebook executability.
+This repository contains a repaired QANet assignment codebase plus additional fixes for:
+- evaluation decoding,
+- checkpoint selection,
+- preprocessing / embedding coverage,
+- normalization / encoder stability,
+- Colab RAM usage.
+
+The main goal of this README is to explain **how to retrain correctly** so that the latest fixes actually take effect.
 
 ---
 
-## 1. What was changed
+## 1. What was fixed
 
-To address the low-EM issue from the previous mini-data / short-run setup, the following changes were made.
+Key fixes already included in this repo:
 
-### Code changes
+- **joint best-span decoding** instead of independent start/end argmax;
+- **best-checkpoint saving** by dev EM/F1 instead of effectively keeping only the last checkpoint;
+- **checkpoint-aware evaluation** so evaluation reuses saved model config;
+- **memory-friendlier dataset loading** for full-data Colab runs;
+- **channel-wise LayerNorm** for QANet tensors `[B, C, L]`;
+- **stronger encoder feed-forward network**;
+- **gradient accumulation support**;
+- **scheduler alignment with gradient accumulation**;
+- **better embedding coverage during preprocessing**:
+  - case variants like `Apple` / `apple` are matched more reliably against GloVe;
+  - remaining missing words no longer collapse into a single identical OOV vector.
 
-#### `EvaluateTools/eval_utils.py`
-- changed evaluation decoding from **independent start/end argmax** to **joint best-span decoding**;
-- enforces valid answer spans with:
-  - `start <= end`
-  - bounded `max_answer_len`
-
-This is important because extractive QA should choose the **best valid span**, not two unrelated positions.
-
-#### `TrainTools/train.py`
-- changed checkpoint logic to save the **best checkpoint by dev performance** instead of effectively keeping only the last one;
-- added `max_answer_len` into the training/evaluation flow;
-- added `grad_accum_steps` so Colab can simulate a larger effective batch size without increasing peak memory;
-- improved model-selection behavior for long training runs.
-
-#### `EvaluateTools/evaluate.py`
-- changed evaluation loading so it can reuse the **architecture config stored inside the checkpoint**;
-- this reduces mismatch risk between training-time config and evaluation-time config.
-
-### Notebook changes
-
-#### `assignment1.ipynb`
-- switched the default workflow from **mini data** to **full SQuAD v1.1**;
-- changed the default training recipe to a more realistic high-EM setup:
-  - full `train-v1.1.json`
-  - full `glove.840B.300d.txt`
-  - `optimizer_name="adam"`
-  - `scheduler_name="cosine"`
-  - `num_steps=12000`
-  - `batch_size=16`
-  - `test_num_batches=-1`
-
-### Documentation changes
-
-#### `README.md`
-- rewritten to explain:
-  - what was changed;
-  - why previous EM could stay low;
-  - how users should train the updated repo;
-  - how to run smoke tests vs real training.
-
-#### `requirements.txt`
-- cleaned duplicated entries.
+Because of the preprocessing fixes, **you must rebuild `_data/` outputs before doing a serious retrain**.
 
 ---
 
-## 2. Why previous EM could be low
+## 2. Important: how to make the new fixes actually take effect
 
-If you train with:
-- `train-mini.json`
-- `glove.mini.txt`
-- `num_steps=200`
+If you only `git pull` and continue training from old cached files, the new fixes may **not** be reflected.
 
-then low EM is expected.
+Before a fresh full retrain, delete old generated files:
 
-That setup is useful only for a **pipeline smoke test**.
-It is **not** a serious configuration for trying to reach a high Exact Match score.
+### Delete old preprocessing outputs
+- `_data/train.npz`
+- `_data/dev.npz`
+- `_data/word_emb.json`
+- `_data/char_emb.json`
+- `_data/word2idx.json`
+- `_data/char2idx.json`
+- `_data/train_eval.json`
+- `_data/dev_eval.json`
+- `_data/dev_meta.json`
 
-If the goal is to improve EM substantially, use:
-- **full** `train-v1.1.json`
-- **full** `dev-v1.1.json`
-- **full** `glove.840B.300d.txt`
-- **thousands of training steps**
-- **full dev-set evaluation** for checkpoint selection
+### Delete old training outputs
+- `_model_full/`
+- `_log_full/`
+
+Then:
+1. run full-data preprocessing again;
+2. retrain from scratch;
+3. evaluate the new best checkpoint.
 
 ---
 
-## 3. How users should use this repo
+## 3. Recommended way to use this repo
 
-## Option A — Recommended: use the notebook on Colab
+## Option A — Recommended: use `assignment1.ipynb` on Colab
 
 Main notebook:
 - `assignment1.ipynb`
 
-### Before training: choose GPU runtime
-
-On Colab, use:
+### Step 0. Use GPU runtime
+On Colab:
 - **Runtime -> Change runtime type -> GPU**
 
-Do **not** train the full-data configuration on a CPU runtime unless you only
-want a slow smoke test.
+Do not use CPU runtime for a serious full-data training run.
 
-### Step 1. Mount Google Drive
+### Step 1. Mount Drive
 
 ```python
 from google.colab import drive
 drive.mount('/content/drive')
 ```
 
-### Step 2. Clone the repo to Drive
+### Step 2. Clone / update repo
 
 ```python
 import os
@@ -120,25 +101,18 @@ else:
 !python -m spacy download en_core_web_sm
 ```
 
-### Step 4. Open and run `assignment1.ipynb`
-
-The notebook is already configured for:
+### Step 4. Open `assignment1.ipynb` and run all sections in order
+The notebook now includes:
 - full-data download;
-- full-data preprocessing;
-- long training;
-- best-checkpoint evaluation.
-
-For standard Colab memory, start conservatively:
-- `batch_size=2`
-- `grad_accum_steps=4` (effective batch size = 8)
-
-If runtime memory is still tight:
-- keep `batch_size=2` and lower `num_steps` only for smoke testing
-- or try `batch_size=4` with `grad_accum_steps=2` if the runtime clearly has enough memory
+- cache cleanup before preprocessing;
+- preprocessing rebuild;
+- checkpoint/log cleanup before retraining;
+- training;
+- evaluation.
 
 ---
 
-## Option B — Run the pipeline manually
+## Option B — Run manually
 
 ### 1) Download full data
 
@@ -153,9 +127,23 @@ This downloads:
 - GloVe `glove.840B.300d.txt`
 - spaCy model dependency
 
-### 2) Preprocess full data
+### 2) Clear old generated files before preprocessing
 
-> If you pulled a newer version of this repo, re-run preprocessing from scratch so that `word_emb.json`, `word2idx.json`, `train.npz`, and `dev.npz` are rebuilt with the latest embedding / vocab logic.
+```python
+from pathlib import Path
+
+for path in [
+    "_data/train.npz", "_data/dev.npz",
+    "_data/word_emb.json", "_data/char_emb.json",
+    "_data/word2idx.json", "_data/char2idx.json",
+    "_data/train_eval.json", "_data/dev_eval.json", "_data/dev_meta.json",
+]:
+    p = Path(path)
+    if p.exists():
+        p.unlink()
+```
+
+### 3) Rebuild preprocessing outputs
 
 ```python
 from Tools.preproc import preprocess
@@ -170,7 +158,24 @@ preprocess(
 )
 ```
 
-### 3) Train
+### 4) Clear old checkpoints/logs before a fresh retrain
+
+```python
+from pathlib import Path
+import shutil
+
+for path in ["_model_full", "_log_full"]:
+    p = Path(path)
+    if p.exists():
+        shutil.rmtree(p)
+
+Path("_model_full").mkdir(exist_ok=True)
+Path("_log_full").mkdir(exist_ok=True)
+```
+
+### 5) Train
+
+#### Preferred configuration if GPU memory allows it
 
 ```python
 from TrainTools.train import train
@@ -184,10 +189,10 @@ results = train(
     dev_eval_json="_data/dev_eval.json",
     save_dir="_model_full",
     log_dir="_log_full",
-    num_steps=12000,
-    checkpoint=1000,
-    batch_size=2,
-    grad_accum_steps=4,
+    num_steps=22000,
+    checkpoint=2000,
+    batch_size=8,
+    grad_accum_steps=1,
     seed=42,
     optimizer_name="adam",
     scheduler_name="cosine",
@@ -199,7 +204,38 @@ results = train(
 )
 ```
 
-### 4) Evaluate the best checkpoint
+#### Fallback configuration if batch size 8 runs out of memory
+
+```python
+results = train(
+    train_npz="_data/train.npz",
+    dev_npz="_data/dev.npz",
+    word_emb_json="_data/word_emb.json",
+    char_emb_json="_data/char_emb.json",
+    train_eval_json="_data/train_eval.json",
+    dev_eval_json="_data/dev_eval.json",
+    save_dir="_model_full",
+    log_dir="_log_full",
+    num_steps=44000,
+    checkpoint=4000,
+    batch_size=4,
+    grad_accum_steps=2,
+    seed=42,
+    optimizer_name="adam",
+    scheduler_name="cosine",
+    learning_rate=1e-3,
+    loss_name="qa_nll",
+    norm_name="layer_norm",
+    test_num_batches=-1,
+    max_answer_len=30,
+)
+```
+
+Reason:
+- `batch_size=8` is preferred because it exposes more data per step;
+- if memory is limited, `batch_size=4 + grad_accum_steps=2` gives a similar effective batch size, but needs more total steps.
+
+### 6) Evaluate
 
 ```python
 from EvaluateTools.evaluate import evaluate
@@ -219,59 +255,37 @@ metrics = evaluate(
 
 ---
 
-## 4. Recommended training defaults
+## 4. What to expect
 
-Current recommended starting recipe:
-- full SQuAD v1.1 train/dev
-- full GloVe 840B 300d
-- `optimizer_name="adam"`
-- `scheduler_name="cosine"`
-- `batch_size=2`
-- `grad_accum_steps=4` (effective batch size = 8)
-- `num_steps=12000`
-- `checkpoint=1000`
-- `test_num_batches=-1`
-- `max_answer_len=30`
-
-If Colab memory is not enough:
-- keep `batch_size=2`
-- reduce `grad_accum_steps` only if you need a faster smoke test rather than a strong final run
-
-If the model is still improving late in training:
-- increase `num_steps` to `16000` or `20000`
-
-If training is unstable:
-- try `learning_rate=5e-4`
+- Metrics are printed on a **0–100 percentage scale**.
+  - Example: `F1 4.7%` means `4.7 percent`, not `4.7 out of 1`.
+- A final result around **F1 4.9% / EM 1.3%** is still abnormally low for a repaired QA system.
+- If results remain that low after following the full retrain process above, do **not** continue from the same checkpoint; instead verify:
+  - you rebuilt preprocessing outputs;
+  - you are not evaluating stale checkpoints;
+  - you are using the latest `main` branch.
 
 ---
 
 ## 5. Smoke test mode
 
-If a user only wants to verify that the pipeline runs end-to-end quickly, they can temporarily switch back to:
+If you only need a fast pipeline check, you can temporarily switch back to:
 - `download_mini()`
 - `train-mini.json`
 - `glove.mini.txt`
 - `num_steps=20` or `200`
 
-But that mode should only be used for:
+But that mode is only for:
 - dependency checks;
 - notebook executability checks;
-- pipeline smoke tests.
+- smoke tests.
 
-It should **not** be used as the final training setup for EM comparison.
+It is **not** the recommended setup for trying to recover EM.
 
 ---
 
 ## 6. Notes
 
-- Metrics in this repo are returned on a **0–100 scale**, not 0–1.
 - Full-data SQuAD is memory-heavy on Colab.
-- This repo now uses a more memory-friendly dataset loading path, but full-data
-  training is still far heavier than the previous mini-data smoke-test setup.
-- F1 / EM are printed on a **0–100 percentage scale**, e.g. `4.5` means `4.5%`, not `4.5x`.
-- Final EM depends mostly on:
-  - training data scale,
-  - training duration,
-  - checkpoint selection,
-  - and decoding correctness.
-- If local and Colab results differ, trust the clean Colab rerun using the same configuration.
+- This repo reduces RAM pressure, but full-data training is still much heavier than mini-data smoke tests.
+- If local and Colab results disagree, trust a clean Colab rerun using the same configuration and rebuilt `_data/` outputs.
