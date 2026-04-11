@@ -11,6 +11,12 @@ This repository contains a repaired QANet assignment codebase plus additional fi
 
 The main goal of this README is to explain **how to retrain correctly** so that the latest fixes actually take effect, and how to use a high-memory Colab setup to push for better EM.
 
+**Important:** `assignment1.ipynb` is now designed to be rerun from top to bottom after a runtime restart. It includes automatic sanity gates that stop the notebook early if:
+- the repo is stale;
+- preprocessing statistics look wrong;
+- label upper bound is too low;
+- tiny-subset overfit fails.
+
 ---
 
 ## 1. What was fixed
@@ -136,12 +142,13 @@ In that case:
 3. run the sync cell again
 
 ### Step 5. Open `assignment1.ipynb` and run all sections in order
-The notebook now includes:
+The notebook is now meant to be rerun **directly from top to bottom** after a runtime restart. It includes:
 - full-data download;
 - cache cleanup before preprocessing;
 - preprocessing rebuild;
 - preprocessing statistics inspection;
 - tiny-subset overfit sanity check;
+- automatic assertions that stop the run early if sanity checks fail;
 - checkpoint/log cleanup before retraining;
 - training;
 - evaluation.
@@ -260,7 +267,8 @@ overfit_results = overfit_check(
 
 Expected behavior:
 - F1 / EM should rise sharply on this tiny subset;
-- if they stay near random, do **not** launch the long full-data run yet.
+- the notebook now asserts that this tiny-subset check must pass before the long run;
+- if it does not pass, fix the pipeline/implementation issue first.
 
 ### 4) Clear old checkpoints/logs before a fresh retrain
 
