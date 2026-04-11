@@ -255,20 +255,24 @@ overfit_results = overfit_check(
     word_emb_json="_data/word_emb.json",
     char_emb_json="_data/char_emb.json",
     train_eval_json="_data/train_eval.json",
-    subset_size=64,
+    subset_size=16,
     save_dir="_overfit_check",
     log_dir="_overfit_log",
-    num_steps=400,
-    checkpoint=100,
-    batch_size=16,
-    learning_rate=3e-3,
+    num_steps=1000,
+    checkpoint=200,
+    batch_size=8,
+    learning_rate=5e-3,
+    dropout=0.0,
+    dropout_char=0.0,
+    scheduler_name="lambda",
 )
 ```
 
 Expected behavior:
+- the notebook now uses an intentionally easier overfit setting: small subset, more steps, no dropout, constant LR;
 - F1 / EM should rise sharply on this tiny subset;
-- the notebook now asserts that this tiny-subset check must pass before the long run;
-- if it does not pass, fix the pipeline/implementation issue first.
+- the notebook asserts that this tiny-subset check must pass before the long run;
+- if it still does not pass, that strongly suggests a remaining model bug rather than a simple hyperparameter issue.
 
 ### 4) Clear old checkpoints/logs before a fresh retrain
 
