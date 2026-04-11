@@ -5,13 +5,14 @@ from typing import Union, List
 
 class LayerNorm(nn.Module):
     """
-    Custom LayerNorm implementation without using nn.LayerNorm or F.layer_norm.
+    Channel-wise LayerNorm for channel-first tensors.
 
-    Normalizes over the last len(normalized_shape) dimensions of the input.
-    For a tensor of shape [B, C, L] with normalized_shape=[C, L], normalization
-    is computed over the [C, L] slice of each batch element independently.
+    For QANet we keep activations in shape [B, C, L]. Standard transformer-style
+    layer normalization should normalize each position over the hidden/channel
+    dimension only, not over both channel and sequence length together.
 
-    y = (x - mean) / sqrt(var + eps) * weight + bias
+    This implementation therefore normalizes over dim=1 for inputs shaped
+    [B, C, *], and applies one affine scale/bias per channel.
     """
 
     def __init__(
@@ -25,17 +26,22 @@ class LayerNorm(nn.Module):
         self.normalized_shape = list(normalized_shape)
         self.eps = eps
 
-        # Learnable affine parameters (same shape as normalized_shape)
-        self.weight = nn.Parameter(torch.ones(self.normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(self.normalized_shape))
+        if len(self.normalized_shape) != 1:
+            raise ValueError(
+                "This LayerNorm expects a single channel dimension, e.g. LayerNorm(C)."
+            )
+
+        channels = self.normalized_shape[0]
+        self.weight = nn.Parameter(torch.ones(channels))
+        self.bias = nn.Parameter(torch.zeros(channels))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Determine which dims to reduce over (the last N dims)
-        n = len(self.normalized_shape)
-        dims = tuple(range(-n, 0))  # e.g. (-2, -1) for a 2-D normalized_shape
+        if x.ndim < 2:
+            raise ValueError(f"Expected at least 2D input, got shape {tuple(x.shape)}")
 
-        mean = x.mean(dim=dims, keepdim=True)
-        var = x.var(dim=dims, keepdim=True, unbiased=False)
-
+        mean = x.mean(dim=1, keepdim=True)
+        var = x.var(dim=1, keepdim=True, unbiased=False)
         x_norm = (x - mean) / torch.sqrt(var + self.eps)
-        return x_norm * self.weight.unsqueeze(0) + self.bias.unsqueeze(0)
+
+        affine_shape = (1, self.weight.numel()) + (1,) * (x.ndim - 2)
+        return x_norm * self.weight.view(affine_shape) + self.bias.view(affine_shape)
