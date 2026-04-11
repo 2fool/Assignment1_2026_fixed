@@ -160,7 +160,30 @@ preprocess(
 )
 ```
 
-### 3.5. Before the long run: inspect preprocess stats and run a tiny overfit check
+### 3.5. Before the long run: inspect preprocess stats, check label upper bound, and run a tiny overfit check
+
+After rebuilding `_data/`, check:
+- `_data/preprocess_stats.json`
+- how many word embeddings were matched from pretrained GloVe vs randomly initialized
+- how many train/dev records were actually built after filtering
+
+Then check the *label upper bound*:
+
+```python
+from Tools.data_diagnostics import label_upper_bound
+
+train_label_upper = label_upper_bound("_data/train.npz", "_data/train_eval.json", limit=2000)
+dev_label_upper = label_upper_bound("_data/dev.npz", "_data/dev_eval.json", limit=2000)
+
+print(train_label_upper)
+print(dev_label_upper)
+```
+
+Interpretation:
+- if the decoded gold spans already have very low EM/F1 against the official answers, then preprocessing labels are misaligned;
+- in that case, a long training run will not fix the problem.
+
+Then run the tiny-subset overfit check before the expensive full run:
 
 After rebuilding `_data/`, check:
 - `_data/preprocess_stats.json`
